@@ -1,8 +1,11 @@
 package com.example.nick.sunshine.app;
 
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.text.format.Time;
 import android.util.Log;
@@ -12,6 +15,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
@@ -27,8 +31,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * A placeholder fragment containing a simple view.
@@ -60,8 +62,7 @@ public class ForecastFragment extends Fragment {
 
         int id = item.getItemId();
         if (id == R.id.action_refresh) {
-            FetchWeatherTask fwt = new FetchWeatherTask();
-            fwt.execute("33326");
+            updateWeatherData();
         }
 
         return super.onOptionsItemSelected(item);
@@ -72,29 +73,43 @@ public class ForecastFragment extends Fragment {
                              Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_main, container, false);
 
-        String[] fakeData = {
-                "Today - Sunny - 88 / 63",
-                "Tommorow - Foggy - 70 / 46",
-                "Weds - Cloudy - 80 / 68",
-                "Thurs - Rainy - 72 / 63",
-                "Fri - Foggy - 72 / 56",
-                "Sat - Sunny - 79 / 60",
-                "Sun - Rainy - 88 / 63"
-        };
-
-        List<String> weekForecast = new ArrayList<>(Arrays.asList(fakeData));
-
         mForecastAdapter = new ArrayAdapter<>(
-                getActivity(), R.layout.list_item_forecast, R.id.list_item_forecast_textview, weekForecast);
-        mForecastAdapter.setNotifyOnChange(true);
-
-        FetchWeatherTask fwt = new FetchWeatherTask();
-        fwt.execute("33326");
+                getActivity(),
+                R.layout.list_item_forecast,
+                R.id.list_item_forecast_textview,
+                new ArrayList<String>());
 
         ListView listView = (ListView) rootView.findViewById(R.id.listview_forecast);
         listView.setAdapter(mForecastAdapter);
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                String text = parent.getAdapter().getItem(position).toString();
+                Intent detailIntent = new Intent(getActivity(), DetailActivity.class);
+                detailIntent.putExtra(Intent.EXTRA_TEXT, text);
+                startActivity(detailIntent);
+            }
+        });
 
         return rootView;
+    }
+
+    /**
+     * Starts the task to fetch the weather data from the server using the zip code entered in
+     * preferences.
+     */
+    private void updateWeatherData(){
+        FetchWeatherTask fwt = new FetchWeatherTask();
+        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        String zip = sharedPref.getString(getString(R.string.pref_location_key),
+                getString(R.string.pref_location_default));
+        fwt.execute(zip);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        updateWeatherData();
     }
 
     class FetchWeatherTask extends AsyncTask<String, Void, String[]>{
@@ -209,12 +224,31 @@ public class ForecastFragment extends Fragment {
          * Prepare the weather high/lows for presentation.
          */
         private String formatHighLows(double high, double low) {
+
+            SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(getActivity());
+            String units = sharedPref.getString(getString(R.string.pref_unit_key),
+                    getString(R.string.pref_unit_default));
+
+            if (units.equals(getString(R.string.pref_unit_imperial))){
+                high = convertToImperial(high);
+                low = convertToImperial(low);
+            }
+            Log.d("CompareUnitType: ", getString(R.string.pref_unit_imperial));
+            Log.d("UnitType: ", units);
+
             // For presentation, assume the user doesn't care about tenths of a degree.
             long roundedHigh = Math.round(high);
             long roundedLow = Math.round(low);
 
-            String highLowStr = roundedHigh + "/" + roundedLow;
+            String highLowStr = roundedHigh + "°/" + roundedLow + "°";
             return highLowStr;
+        }
+
+        /**
+         * Convert metric units to imperial
+         */
+        private double convertToImperial(double x){
+            return (x * 1.8) + 32;
         }
 
         /**
